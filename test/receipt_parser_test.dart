@@ -63,7 +63,7 @@ Tiền thối:                        30.000 đ
     });
 
     test('Trích xuất hóa đơn tiếng Anh (English Restaurant Bill)', () {
-      const rawReceipt = '''
+      const rawReceipt = r'''
 STARBUCKS COFFEE
 Store #48291
 Date: 2023-11-05 09:12

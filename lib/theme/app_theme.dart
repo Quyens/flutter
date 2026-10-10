@@ -19,7 +19,6 @@ class AppTheme {
         primary: primaryColor,
         secondary: secondaryColor,
         error: accentColor,
-        background: backgroundColor,
         surface: surfaceColor,
       ),
       scaffoldBackgroundColor: backgroundColor,
@@ -34,7 +33,7 @@ class AppTheme {
         ),
         iconTheme: IconThemeData(color: textDark),
       ),
-      cardTheme: CardTheme(
+      cardTheme: CardThemeData(
         color: surfaceColor,
         elevation: 0,
         shape: RoundedRectangleBorder(

@@ -18,7 +18,7 @@ class HeuristicReceiptParser {
     'grand total', 'net total', 'amount due', 'total amount', 'total',
   ];
 
-  // Danh sách từ khóa nên loại trừ khi tìm Tổng tiền (tránh lấy nhầm Tiền khách đưa, Tiền thối)
+  // Danh sách từ khóa nên loại trừ khi tìm Tổng tiền (tránh lấy nhầm Tiền khách đưa, Tiền thối, Thẻ)
   static final List<String> _avoidTotalKeywords = [
     'tiền khách đưa', 'tien khach dua',
     'khách đưa', 'khach dua',
@@ -28,6 +28,7 @@ class HeuristicReceiptParser {
     'thối lại', 'thoi lai',
     'change', 'cash given', 'customer cash',
     'điểm tích', 'tích lũy', 'mst', 'mã số thuế', 'stk', 'tài khoản',
+    'visa', 'mastercard', 'payment', 'card', 'thẻ', '****', 'subtotal',
   ];
 
   // Danh sách từ khóa nhận diện thương hiệu phổ biến
@@ -287,9 +288,9 @@ class HeuristicReceiptParser {
     double? detectedAmount;
     double highestScore = -1.0;
 
-    // Pattern nhận diện số tiền (hỗ trợ định dạng 150.000, 150,000, 150 000, 15.50 $)
+    // Pattern nhận diện số tiền (hỗ trợ cả định dạng VNĐ 150.000, 70.000 và tiền USD 9.99, 15.50)
     final regAmount = RegExp(
-      r'(?:(?:\$|₫|đ|vnd|vnđ)\s*)?([0-9]{1,3}(?:[.,\s][0-9]{3})+(?:[.,][0-9]{1,2})?|[0-9]{4,9})(?:\s*(?:₫|đ|vnd|vnđ|\$))?',
+      r'(?:(?:\$|₫|đ|vnd|vnđ)\s*)?([0-9]{1,3}(?:[.,][0-9]{3})+(?:[.,][0-9]{1,2})?|[0-9]+[.,][0-9]{1,2}|[0-9]{4,9})(?:\s*(?:₫|đ|vnd|vnđ|\$))?',
       caseSensitive: false,
     );
 
@@ -297,7 +298,12 @@ class HeuristicReceiptParser {
       final line = lines[i];
       final lineLower = line.toLowerCase();
 
-      // Kiểm tra xem dòng có từ khóa tiêu cực (tiền khách đưa, thối lại) không
+      // Bỏ qua dòng tiêu đề hóa đơn chung (phiếu thanh toán, hóa đơn) để tránh nhầm thành dòng tổng tiền
+      if (_headerNoiseKeywords.any((noise) => lineLower.contains(noise))) {
+        continue;
+      }
+
+      // Kiểm tra xem dòng có từ khóa tiêu cực (tiền khách đưa, thối lại, thẻ) không
       bool hasAvoidKeyword = false;
       for (final avoid in _avoidTotalKeywords) {
         if (lineLower.contains(avoid)) {
@@ -310,11 +316,13 @@ class HeuristicReceiptParser {
       int keywordWeight = 0;
       for (final kw in _totalKeywords) {
         if (lineLower.contains(kw)) {
-          // 'tổng cộng', 'thanh toán' có trọng số cao nhất
-          if (kw == 'tổng cộng' || kw == 'thanh toán' || kw == 'grand total' || kw == 'tổng tiền') {
-            keywordWeight = 50;
+          if (kw == 'tổng cộng' || kw == 'tong cong' ||
+              kw == 'tổng thanh toán' || kw == 'tong thanh toan' ||
+              kw == 'tổng tiền' || kw == 'tong tien' ||
+              kw == 'grand total' || kw == 'net total' || kw == 'amount due') {
+            keywordWeight = 60;
           } else {
-            keywordWeight = 30;
+            keywordWeight = 35;
           }
           break;
         }
@@ -326,19 +334,27 @@ class HeuristicReceiptParser {
         final rawNumberStr = match.group(1);
         final amountValue = _cleanAndParseNumber(rawNumberStr);
 
-        if (amountValue != null && amountValue > 500) { // Loại bỏ các số quá nhỏ (như số lượng 1, 2 hoặc số bàn)
-          double score = 0.0;
+        if (amountValue != null && amountValue > 0) {
+          // Bỏ qua nếu là số quá nhỏ (< 100) khi không có ký hiệu $ và không có từ khóa tổng tiền
+          final isSmallNumber = amountValue < 100 && !lineLower.contains(r'$') && keywordWeight == 0;
+          if (isSmallNumber) continue;
 
-          // Điểm từ từ khóa Tổng tiền
+          // Bỏ qua nếu dòng là ngày tháng và số này trùng với năm (2018 - 2035)
+          if ((lineLower.contains('ngày') || lineLower.contains('date')) &&
+              amountValue >= 2018 && amountValue <= 2035) {
+            continue;
+          }
+
+          double score = 0.0;
           score += keywordWeight;
 
-          // Phạt nặng nếu cùng dòng có từ khóa tiền thối / tiền khách đưa
+          // Phạt nặng nếu cùng dòng có từ khóa tiền thối / tiền khách đưa / thẻ visa
           if (hasAvoidKeyword) {
             score -= 60.0;
           }
 
           // Điểm cộng nếu có ký hiệu tiền tệ (đ, vnđ, $)
-          if (lineLower.contains('đ') || lineLower.contains('vnd') || lineLower.contains('vnđ') || lineLower.contains('\$')) {
+          if (lineLower.contains('đ') || lineLower.contains('vnd') || lineLower.contains('vnđ') || lineLower.contains(r'$')) {
             score += 15.0;
           }
 
@@ -359,16 +375,24 @@ class HeuristicReceiptParser {
       // Nếu dòng chứa từ khóa Tổng tiền nhưng số lại nằm ở dòng ngay sau (Dòng i+1)
       if (keywordWeight > 0 && matches.isEmpty && (i + 1) < lines.length) {
         final nextLine = lines[i + 1];
-        final nextMatches = regAmount.allMatches(nextLine);
-        for (final match in nextMatches) {
-          final rawNumberStr = match.group(1);
-          final amountValue = _cleanAndParseNumber(rawNumberStr);
-          if (amountValue != null && amountValue > 500) {
-            double score = keywordWeight + 20.0; // Điểm liền kề
-            logs.add('Phát hiện tiền ở dòng kế tiếp ($amountValue) của từ khóa ở dòng $i. Score: $score');
-            if (score > highestScore) {
-              highestScore = score;
-              detectedAmount = amountValue;
+        final nextLineLower = nextLine.toLowerCase();
+        if (!_avoidTotalKeywords.any((avoid) => nextLineLower.contains(avoid)) &&
+            !nextLineLower.contains('ngày') && !nextLineLower.contains('date')) {
+          final nextMatches = regAmount.allMatches(nextLine);
+          for (final match in nextMatches) {
+            final rawNumberStr = match.group(1);
+            final amountValue = _cleanAndParseNumber(rawNumberStr);
+            if (amountValue != null && amountValue > 0) {
+              if (amountValue >= 2018 && amountValue <= 2035 &&
+                  (nextLineLower.contains('ngày') || nextLineLower.contains('date'))) {
+                continue;
+              }
+              double score = keywordWeight + 20.0; // Điểm liền kề
+              logs.add('Phát hiện tiền ở dòng kế tiếp ($amountValue) của từ khóa ở dòng $i. Score: $score');
+              if (score > highestScore) {
+                highestScore = score;
+                detectedAmount = amountValue;
+              }
             }
           }
         }
@@ -406,9 +430,54 @@ class HeuristicReceiptParser {
 
   /// Dự đoán danh mục chi tiêu tự động dựa trên tên quán và nội dung hóa đơn
   static ExpenseCategory _suggestCategory(String merchant, String fullText, List<String> logs) {
+    final merchantLower = merchant.toLowerCase();
     final combined = '$merchant $fullText'.toLowerCase();
 
-    // 1. Ăn uống (Food & Dining)
+    // Ưu tiên 1: Tên thương hiệu/người bán (Merchant Name) có trọng số cao nhất
+    if (_containsAny(merchantLower, [
+      'siêu thị', 'mart', 'winmart', 'circle k', 'gs25', 'familymart', '7-eleven',
+      'co.opmart', 'coopmart', 'bách hóa xanh', 'bach hoa xanh', 'big c', 'lotte mart',
+      'shop', 'store'
+    ])) {
+      logs.add('Dự đoán danh mục (theo Merchant): Mua sắm');
+      return ExpenseCategory.shopping;
+    }
+
+    if (_containsAny(merchantLower, [
+      'cà phê', 'cafe', 'coffee', 'trà sữa', 'tra sua', 'highlands', 'phúc long',
+      'starbucks', 'katinat', 'cheese coffee', 'quán', 'nhà hàng', 'restaurant',
+      'kfc', 'lotteria', 'jollibee', 'pizza', 'bbq', 'lẩu', 'nướng', 'haidilao', 'bistro'
+    ])) {
+      logs.add('Dự đoán danh mục (theo Merchant): Ăn uống');
+      return ExpenseCategory.foodAndDining;
+    }
+
+    if (_containsAny(merchantLower, [
+      'grab', 'be', 'gojek', 'xanh sm', 'taxi', 'petrolimex'
+    ])) {
+      logs.add('Dự đoán danh mục (theo Merchant): Di chuyển');
+      return ExpenseCategory.transport;
+    }
+
+    if (_containsAny(merchantLower, [
+      'nhà thuốc', 'pharmacity', 'long châu', 'an khang', 'bệnh viện', 'phòng khám'
+    ])) {
+      logs.add('Dự đoán danh mục (theo Merchant): Sức khỏe');
+      return ExpenseCategory.health;
+    }
+
+    // Ưu tiên 2: Nội dung chi tiết các dòng trong hóa đơn (Item list)
+    // 1. Mua sắm (Shopping)
+    if (_containsAny(combined, [
+      'siêu thị', 'mart', 'winmart', 'circle k', 'gs25', 'familymart', '7-eleven',
+      'co.opmart', 'bách hóa xanh', 'big c', 'lotte mart', 'quần áo', 'thời trang',
+      'zara', 'uniqlo', 'shopee', 'tiki', 'lazada'
+    ])) {
+      logs.add('Dự đoán danh mục: Mua sắm');
+      return ExpenseCategory.shopping;
+    }
+
+    // 2. Ăn uống (Food & Dining)
     if (_containsAny(combined, [
       'cà phê', 'cafe', 'coffee', 'trà sữa', 'tra sua', 'highlands', 'phúc long',
       'starbucks', 'katinat', 'cheese coffee', 'quán cơm', 'phở', 'bún', 'bánh mì',
@@ -417,16 +486,6 @@ class HeuristicReceiptParser {
     ])) {
       logs.add('Dự đoán danh mục: Ăn uống');
       return ExpenseCategory.foodAndDining;
-    }
-
-    // 2. Mua sắm (Shopping)
-    if (_containsAny(combined, [
-      'siêu thị', 'mart', 'winmart', 'circle k', 'gs25', 'familymart', '7-eleven',
-      'co.opmart', 'bách hóa xanh', 'big c', 'lotte mart', 'quần áo', 'thời trang',
-      'zara', 'uniqlo', 'shopee', 'tiki', 'lazada', 'shop', 'store'
-    ])) {
-      logs.add('Dự đoán danh mục: Mua sắm');
-      return ExpenseCategory.shopping;
     }
 
     // 3. Di chuyển (Transport)

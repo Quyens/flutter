@@ -1,6 +1,6 @@
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
-import 'package:intl/intl.dart';
+import 'package:intl/intl.dart' hide TextDirection;
 import '../../models/category_model.dart';
 
 /// Biểu đồ tròn tương tác vẽ hoàn toàn bằng CustomPainter
@@ -117,12 +117,6 @@ class _InteractivePieChartState extends State<InteractivePieChart>
         ),
       );
     }
-
-    final currencyFormatter = NumberFormat.currency(
-      locale: 'vi_VN',
-      symbol: '₫',
-      decimalDigits: 0,
-    );
 
     return Column(
       children: [

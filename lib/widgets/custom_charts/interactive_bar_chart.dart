@@ -1,6 +1,6 @@
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
-import 'package:intl/intl.dart';
+import 'package:intl/intl.dart' hide TextDirection;
 
 /// Biểu đồ cột tương tác theo dõi chi tiêu theo ngày vẽ bằng CustomPainter
 class InteractiveBarChart extends StatefulWidget {
@@ -147,11 +147,6 @@ class _BarChartPainter extends CustomPainter {
     final barCount = dates.length;
     final groupWidth = chartWidth / barCount;
     final barWidth = groupWidth * 0.48;
-
-    final currencyFormatter = NumberFormat.compactCurrency(
-      locale: 'vi_VN',
-      symbol: '₫',
-    );
 
     // 2. Vẽ từng cột chi tiêu
     for (int i = 0; i < barCount; i++) {
