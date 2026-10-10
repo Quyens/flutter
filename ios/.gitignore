@@ -1,0 +1,36 @@
+.DS_Store
+.atom/
+.idea
+.vscode/
+.packages
+.pub/
+.dart_tool/
+
+# Flutter/Dart/Xcode build artifacts
+build/
+Flutter/App.framework
+Flutter/Flutter.framework
+Flutter/Flutter.podspec
+Flutter/Generated.xcconfig
+Flutter/ephemeral/
+Flutter/app.flx
+Flutter/app.zip
+Flutter/flutter_assets/
+Flutter/flutter_export_environment.sh
+
+# CocoaPods
+Pods/
+Podfile.lock
+.symlinks/
+profile
+xcuserdata
+*.moved-aside
+DerivedData
+*.pbxuser
+*.mode1v3
+*.mode2v3
+*.perspectivev3
+!default.pbxuser
+!default.mode1v3
+!default.mode2v3
+!default.perspectivev3
