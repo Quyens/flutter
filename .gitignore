@@ -5,9 +5,11 @@
 *.swp
 .DS_Store
 .atom/
+.build/
 .buildlog/
 .history
 .svn/
+.swiftpm/
 migrate_working_dir/
 
 # IntelliJ related
@@ -55,6 +57,10 @@ ios/.generated/
 **/ios/Flutter/framework_info.json
 **/ios/ServiceDefinitions.json
 **/ios/Runner/GeneratedPluginRegistrant.*
+
+# Android related
+**/android/local.properties
+**/android/app/src/main/java/io/flutter/plugins/GeneratedPluginRegistrant.java
 
 # Exceptions to above rules.
 !/packages/flutter_tools/test/data/dart_dependencies_test/package_api_docs/pubspec.lock
